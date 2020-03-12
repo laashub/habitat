@@ -1,0 +1,321 @@
+expeditor:
+  secrets:
+    PIPELINE_HAB_AUTH_TOKEN:
+      path: account/static/habitat/chef-ci
+      field: acceptance_auth_token # Acceptance Builder
+      # auth_token = production
+  accounts:
+    - aws/chef-cd
+  defaults:
+    buildkite:
+      timeout_in_minutes: 30
+      env:
+        HAB_ORIGIN: "core"
+        PIPELINE_HAB_BLDR_URL: "https://bldr.acceptance.habitat.sh"
+        # TODO: Should nightly be deleted before the run, or accumulate packages?
+        HAB_BLDR_CHANNEL: "nightly"
+
+steps:
+#######################################################################
+# Sync!
+#######################################################################
+  - label: "[:habicat: Sync packages to acceptance]"
+    command: 
+      - .expeditor/scripts/nightly/sync_live_packages.sh 
+    executor:
+      docker:
+        environment:
+          BLDR_SOURCE_CHANNEL="refresh-2020q1-006b"
+          BLDR_DEST_CHANNEL=""
+  
+  - wait
+#######################################################################
+# Build!
+#######################################################################
+
+  - label: "[:linux: build hab]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh hab
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:linux: :two: build hab]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh hab
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux-kernel2
+
+  - label: "[:windows: build hab]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 hab
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
+  - label: "[:mac: build hab]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      # We need to install bash 4+ so we are able to use all the modern capabilities.
+      - brew install bash
+      - .expeditor/scripts/release_habitat/build_mac_hab_binary.sh
+    env:
+      BUILD_PKG_TARGET: "x86_64-darwin"
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    expeditor:
+      executor:
+        macos:
+          os-version: "10.13"
+          inherit-environment-vars: true
+      buildkite:
+        timeout_in_minutes: 45
+
+  - wait
+
+  - label: "[:linux: build hab-plan-build]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh plan-build
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:linux: :two: build hab-plan-build]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh plan-build
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux-kernel2
+
+  - label: "[:windows: build plan-build-ps1]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 plan-build-ps1
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
+  - wait
+
+  - label: "[:linux: build hab-backline]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh backline
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:linux: :two: build hab-backline]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh backline
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux-kernel2
+
+  - wait
+
+  - label: "[:linux: build hab-studio]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh studio
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:linux: :two: build hab-studio]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh studio
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux-kernel2
+
+  - label: "[:windows: build studio]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 studio
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
+  - wait
+  # TODO: We've built enough to kick off the self-hosting tests. 
+  # How do we kick those off/where do they live?
+  #
+  # Now that we've got a new Studio, we can build everything else
+  # using the build toolchain we just built.
+
+  - label: "[:linux: build launcher]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh launcher
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:linux: :two: build launcher]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh launcher
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux-kernel2
+
+  - label: "[:windows: build launcher]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 launcher
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
+  - label: "[:linux: build hab-sup]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh sup
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:linux: :two: build hab-sup]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh sup
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux-kernel2
+
+  - label: "[:windows: build hab-sup]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 sup
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
+  - label: "[:linux: build hab-pkg-export-docker]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh pkg-export-docker
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:windows: build hab-pkg-export-docker]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 pkg-export-docker
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
+  - label: "[:linux: build hab-pkg-export-tar]"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh pkg-export-tar
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux
+
+  - label: "[:linux: :two: build hab-pkg-export-tar]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - .expeditor/scripts/release_habitat/build_component.sh pkg-export-tar
+    expeditor:
+      executor:
+        docker:
+          privileged: true
+          environment:
+            - BUILD_PKG_TARGET=x86_64-linux-kernel2
+
+  - label: "[:windows: build hab-pkg-export-tar]"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 pkg-export-tar
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
+  - wait
+
+  # Windows Service must be built after the Windows Launcher
+  - label: ":windows: Build windows service"
+    skip: "Disabled for early iteration with core-plans refresh"
+    command:
+      - powershell .expeditor/scripts/release_habitat/build_component.ps1 windows-service
+    expeditor:
+      executor:
+        docker:
+          host_os: windows
+          environment:
+            - BUILD_PKG_TARGET=x86_64-windows
+            - BUILDKITE_AGENT_ACCESS_TOKEN
+
