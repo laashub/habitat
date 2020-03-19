@@ -787,7 +787,7 @@ impl Manager {
         let service = match Service::new(self.sys.clone(),
                                          spec,
                                          self.fs_cfg.clone(),
-                                         self.organization.as_ref().map(String::as_str),
+                                         self.organization.as_deref(),
                                          self.state.gateway_state.clone(),
                                          self.pid_source,
                                          self.feature_flags).await
@@ -1345,7 +1345,7 @@ impl Manager {
                 let result = Service::new(self.sys.clone(),
                                           spec,
                                           self.fs_cfg.clone(),
-                                          self.organization.as_ref().map(String::as_str),
+                                          self.organization.as_deref(),
                                           self.state.gateway_state.clone(),
                                           self.pid_source,
                                           self.feature_flags).await;

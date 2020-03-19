@@ -253,7 +253,7 @@ impl Into<core::service::ServiceGroup> for ServiceGroup {
     fn into(self) -> core::service::ServiceGroup {
         core::service::ServiceGroup::new(self.service,
                                          self.group,
-                                         self.organization.as_ref().map(String::as_str)).unwrap()
+                                         self.organization.as_deref()).unwrap()
     }
 }
 
@@ -262,9 +262,9 @@ impl Identifiable for PackageIdent {
 
     fn name(&self) -> &str { &self.name }
 
-    fn version(&self) -> Option<&str> { self.version.as_ref().map(String::as_str) }
+    fn version(&self) -> Option<&str> { self.version.as_deref() }
 
-    fn release(&self) -> Option<&str> { self.release.as_ref().map(String::as_str) }
+    fn release(&self) -> Option<&str> { self.release.as_deref() }
 }
 
 impl Topology {
