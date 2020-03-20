@@ -142,7 +142,7 @@ pub struct Credentials {
 }
 
 impl Credentials {
-    pub fn new(registry_type: RegistryType, username: &str, password: &str) -> Result<Self> {
+    async fn new(registry_type: RegistryType, username: &str, password: &str) -> Result<Self> {
         match registry_type {
             RegistryType::Amazon => {
                 // The username and password should be valid IAM credentials
@@ -151,19 +151,16 @@ impl Credentials {
                 // TODO TED: Make the region configurable
                 let client = EcrClient::new_with(HttpClient::new()?, provider, Region::UsWest2);
                 let auth_token_req = GetAuthorizationTokenRequest { registry_ids: None };
-                let token = client.get_authorization_token(auth_token_req)
-                                  .sync()
-                                  .map_err(Error::TokenFetchFailed)
-                                  .and_then(|resp| {
-                                      resp.authorization_data
-                                          .ok_or(Error::NoECRTokensReturned)
-                                          .and_then(|auth_data| {
-                                              auth_data[0].clone()
-                                                          .authorization_token
-                                                          .ok_or(Error::NoECRTokensReturned)
-                                          })
-                                  })?;
-
+                let authorization_data = client.get_authorization_token(auth_token_req)
+                                               .await
+                                               .map_err(Error::TokenFetchFailed)?
+                                               .authorization_data
+                                               .ok_or(Error::NoECRTokensReturned)?;
+                let token = authorization_data.get(0)
+                                              .ok_or(Error::NoECRTokensReturned)?
+                                              .authorization_token
+                                              .clone()
+                                              .ok_or(Error::NoECRTokensReturned)?;
                 Ok(Credentials { token })
             }
             RegistryType::Docker | RegistryType::Azure => {
@@ -227,7 +224,7 @@ pub async fn export_for_cli_matches(ui: &mut UI,
                                            matches.value_of("REGISTRY_USERNAME")
                                                   .expect("Username not specified"),
                                            matches.value_of("REGISTRY_PASSWORD")
-                                                  .expect("Password not specified"))?;
+                                                  .expect("Password not specified")).await?;
         docker_image.push(ui, &credentials, naming.registry_url)?;
     }
     if matches.is_present("RM_IMAGE") {
