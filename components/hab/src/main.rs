@@ -28,6 +28,9 @@ use hab::{cli::{self,
           PRODUCT,
           VERSION};
 
+use crate::cli::hab::ConfigOptHab;
+
+use configopt::ConfigOpt;
 use habitat_api_client::BuildOnUpload;
 use habitat_common::{self as common,
                      cli::{cache_key_path_from_matches,
@@ -126,6 +129,16 @@ async fn start(ui: &mut UI, feature_flags: FeatureFlag) -> Result<()> {
         return Ok(());
     } else {
         license::check_for_license_acceptance_and_prompt(ui)?;
+    }
+
+    // Check if `--generate-config` was passed to any subcommands. If it was print the config to
+    // stdout and exit. Ignore any CLI parsing errors. We will catch them later on when
+    // `get_matches` is called. When we switch to using `structopt` exclusivly this will be cleaned
+    // up.
+    if feature_flags.contains(FeatureFlag::CONFIG_FILE) {
+        if let Ok(mut hab) = ConfigOptHab::from_args_safe_ignore_help() {
+            hab.maybe_generate_config_file_and_exit();
+        }
     }
 
     // TODO JB: this feels like an anti-pattern to me. I get that in certain cases, we want to hand
