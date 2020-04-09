@@ -1,6 +1,6 @@
 # Utility function to create a custom tag for a container image that
 # is unique in this test run.
-function Create-CustomTag {
+function New-CustomTag {
     $timestamp = Get-Date -UFormat "%Y%m%d%H%M%S"
     "e2e-test-$timestamp"
 }
@@ -10,7 +10,7 @@ function Create-CustomTag {
 # $extra_args are options for `hab pkg export docker` to influence
 # container creation. (e.g., pass "--multi-layer" to create a
 #multi-layer image.)
-function Create-RedisImage() {
+function New-RedisImage() {
     param(
         [Parameter(Mandatory=$true)][string]$tag,
         [Parameter(Mandatory=$false)][string]$extra_args
@@ -25,7 +25,7 @@ function Create-RedisImage() {
 # $extra_args are for `docker run` and can affect how the container is
 # actually executed. (e.g., pass "--user=12354151" to see if the
 # Supervisor can run as a non-root user)
-function Run-Image() {
+function Start-Container() {
     param(
         [Parameter(Mandatory=$true)][string]$image,
         [Parameter(Mandatory=$false)][string]$extra_args
@@ -37,7 +37,7 @@ function Run-Image() {
 
 # If we can set and get a value from Redis running in the container,
 # then we know we created a container that can actually run.
-function Interact-WithRedisContainer() {
+function Confirm-ContainerBehavior() {
     param(
         [Parameter(Mandatory=$true)][string]$container
     )
@@ -49,43 +49,43 @@ function Interact-WithRedisContainer() {
 
 Describe "hab pkg export docker" {
     BeforeAll {
-        $tag = Create-CustomTag
-        $image = Create-RedisImage $tag
+        $tag = New-CustomTag
+        $script:image = New-RedisImage $tag
     }
 
     AfterAll {
-        docker rmi $image
+        docker rmi $script:image
     }
 
     It "Creates an image" {
-        docker inspect $image | Should -Not -Be $null
+        docker inspect $script:image | Should -Not -Be $null
     }
 
     Describe "executing the container as root" {
         BeforeEach {
-            $container = Run-Image $image
+            $script:container = Start-Container $image
         }
 
         AfterEach {
-            docker kill $container
+            docker kill $script:container
         }
 
         It "works!" {
-            Interact-WithRedisContainer $container
+            Confirm-ContainerBehavior $script:container
         }
     }
 
     Describe "executing a container as non-root" {
         BeforeEach {
-            $container = Run-Image $image "--user=8888888"
+            $script:container = Start-Container $script:image "--user=8888888"
         }
 
         AfterEach {
-            docker kill $container
+            docker kill $script:container
         }
 
         It "works!" {
-            Interact-WithRedisContainer $container
+            Confirm-ContainerBehavior $script:container
         }
 
     }
@@ -93,43 +93,43 @@ Describe "hab pkg export docker" {
 
 Describe "hab pkg export docker --multi-layer" {
     BeforeAll {
-        $tag = Create-CustomTag
-        $image = Create-RedisImage $tag "--multi-layer"
+        $tag = New-CustomTag
+        $script:image = New-RedisImage $tag "--multi-layer"
     }
 
     AfterAll {
-        docker rmi $image
+        docker rmi $script:image
     }
 
     It "Creates an image" {
-        docker inspect $image | Should -Not -Be $null
+        docker inspect $script:image | Should -Not -Be $null
     }
 
     Describe "executing the container as root" {
         BeforeEach {
-            $container = Run-Image $image
+            $script:container = Start-Container $script:image
         }
 
         AfterEach {
-            docker kill $container
+            docker kill $script:container
         }
 
         It "works!" {
-            Interact-WithRedisContainer $container
+            Confirm-ContainerBehavior $script:container
         }
     }
 
     Describe "executing a container as non-root" {
         BeforeEach {
-            $container = Run-Image $image "--user=8888888"
+            $script:container = Start-Container $script:image "--user=8888888"
         }
 
         AfterEach {
-            docker kill $container
+            docker kill $script:container
         }
 
         It "works!" {
-            Interact-WithRedisContainer $container
+            Confirm-ContainerBehavior $script:container
         }
     }
 }
