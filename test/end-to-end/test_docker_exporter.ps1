@@ -10,13 +10,13 @@ function New-CustomTag {
 # $extra_args are options for `hab pkg export docker` to influence
 # container creation. (e.g., pass "--multi-layer" to create a
 #multi-layer image.)
-function New-RedisImage() {
+function New-Image() {
     param(
         [Parameter(Mandatory=$true)][string]$tag,
         [Parameter(Mandatory=$false)][string]$extra_args
     )
-    Write-Host (hab pkg export docker core/redis --tag-custom=$tag --base-pkgs-channel=$env:HAB_INTERNAL_BLDR_CHANNEL $extra_args | Out-String)
-    "core/redis:$tag"
+    Write-Host (hab pkg export docker core/nginx --tag-custom=$tag --base-pkgs-channel=$env:HAB_INTERNAL_BLDR_CHANNEL $extra_args | Out-String)
+    "core/nginx:$tag"
 }
 
 # Run a given Habitat container image in the background, returning the
@@ -31,7 +31,10 @@ function Start-Container() {
         [Parameter(Mandatory=$false)][string]$extra_args
     )
     $name="e2e-docker-export-container"
-    Write-Host (docker run -d --name=$name --rm --env=HAB_LICENSE=accept-no-persist $extra_args $image | Out-String)
+    # We're using a non-standard port because we will also execute these
+    # tests as a non-root user, and non-root users don't get to listen
+    # on port 80.
+    Write-Host (docker run -d -p 9999:9999 --name=$name --rm --env=HAB_LICENSE=accept-no-persist --env=HAB_NGINX='http.listen.port = 9999' $extra_args $image | Out-String)
     "$name"
 }
 
@@ -41,16 +44,19 @@ function Confirm-ContainerBehavior() {
     param(
         [Parameter(Mandatory=$true)][string]$container
     )
-    # Give 5 seconds for the container to come up and for Redis to start
-    Start-Sleep -Seconds 5
-    docker exec $container redis-cli set test whee | Should -Be "OK"
-    docker exec $container redis-cli get test | Should -Be "whee"
+    # Give 10 seconds for the container to come up and for Nginx to start
+    Start-Sleep -Seconds 10
+
+    # This will error with a 403 because nginx is not running any sites
+    try  { Invoke-WebRequest "http://localhost:9999" }
+    catch [Microsoft.PowerShell.Commands.HttpResponseException] { $headers = $_.Exception.Response.Headers }
+    [string]$headers.Server | Should -BeLike "nginx/*"
 }
 
 Describe "hab pkg export docker" {
     BeforeAll {
         $tag = New-CustomTag
-        $script:image = New-RedisImage $tag
+        $script:image = New-Image $tag
     }
 
     AfterAll {
@@ -74,27 +80,27 @@ Describe "hab pkg export docker" {
             Confirm-ContainerBehavior $script:container
         }
     }
+    if($IsLinux) {
+        Describe "executing a container as non-root" {
+            BeforeEach {
+                $script:container = Start-Container $script:image "--user=8888888"
+            }
 
-    Describe "executing a container as non-root" {
-        BeforeEach {
-            $script:container = Start-Container $script:image "--user=8888888"
+            AfterEach {
+                docker kill $script:container
+            }
+
+            It "works!" {
+                Confirm-ContainerBehavior $script:container
+            }
         }
-
-        AfterEach {
-            docker kill $script:container
-        }
-
-        It "works!" {
-            Confirm-ContainerBehavior $script:container
-        }
-
     }
 }
 
 Describe "hab pkg export docker --multi-layer" {
     BeforeAll {
         $tag = New-CustomTag
-        $script:image = New-RedisImage $tag "--multi-layer"
+        $script:image = New-Image $tag "--multi-layer"
     }
 
     AfterAll {
@@ -119,17 +125,19 @@ Describe "hab pkg export docker --multi-layer" {
         }
     }
 
-    Describe "executing a container as non-root" {
-        BeforeEach {
-            $script:container = Start-Container $script:image "--user=8888888"
-        }
+    if($IsLinux) {
+        Describe "executing a container as non-root" {
+            BeforeEach {
+                $script:container = Start-Container $script:image "--user=8888888"
+            }
 
-        AfterEach {
-            docker kill $script:container
-        }
+            AfterEach {
+                docker kill $script:container
+            }
 
-        It "works!" {
-            Confirm-ContainerBehavior $script:container
+            It "works!" {
+                Confirm-ContainerBehavior $script:container
+            }
         }
     }
 }
